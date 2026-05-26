@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>活动日历编辑器</title>
+<style>
+:root {
+  --bg: #eef3ff; --panel: #f8fbff; --panel-line: #d7e0f3;
+  --text: #1d2842; --muted: #68758f; --brand: #5d6cff; --grid: #dce5f7;
+  --row: #ffffff; --danger: #d94f61;
+  --day-w: 52px; --row-h: 96px; --ev-h: 66px; --hdr-h: 96px; --pad-l: 12px; --pad-t: 28px;
+  font-family: "Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+  font-size: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); overflow: hidden; height: 100vh; }
+button { font: inherit; border: 0; cursor: pointer; }
+input, select { font: inherit; outline: none; }
+
+.app { display: grid; grid-template-columns: 280px 1fr; height: 100vh; }
+/* ========== Sidebar ========== */
+.sidebar { background: #f7faff; border-right: 1px solid #d5def2; display: flex; flex-direction: column; }
+.sidebar-title { padding: 10px 14px 4px; }
+.sidebar-title h2 { font-size: 15px; }
+.sidebar-title p { font-size: 10px; color: var(--muted); margin-top: 1px; }
+.side-scroll { flex: 1; overflow-y: auto; padding: 0 10px 10px; }
+
+.panel { background: white; border: 1px solid var(--panel-line); border-radius: 6px; margin-bottom: 6px; }
+.panel-hdr { padding: 8px 12px 2px; font-size: 12px; font-weight: 800; color: var(--text); }
+.panel-body { padding: 2px 12px 8px; }
+
+.field { margin-bottom: 8px; }
+.field label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 2px; }
+.field input, .field select { width: 100%; height: 28px; padding: 0 6px; border: 1px solid #cad5eb; border-radius: 4px; background: #f8fbff; color: var(--text); font-size: 12px; }
+.field input[type="color"] { height: 34px; padding: 2px; cursor: pointer; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; height: 28px; padding: 0 8px; border-radius: 4px; background: white; color: var(--text); font-weight: 700; font-size: 11px; border: 1px solid #cad5eb; gap: 3px; }
+.btn:hover { filter: brightness(0.96); }
+.btn.primary { background: var(--brand); color: white; border-color: transparent; }
+.btn.danger { background: var(--danger); color: white; border-color: transparent; }
+.btn.sm { height: 26px; font-size: 11px; padding: 0 8px; }
+.btn.full { width: 100%; }
+.btn-icon { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 5px; background: #eef3ff; border: 1px solid #d7e0f3; font-size: 14px; font-weight: 700; cursor: pointer; }
+
+.template-area { margin-top: 6px; }
+.tpl-card { display: flex; align-items: stretch; border: 1px solid #d7e0f3; border-radius: 6px; margin-bottom: 6px; background: #f8fbff; cursor: grab; user-select: none; box-shadow: 0 3px 12px rgba(60,75,120,0.12); }
+.tpl-card:active { cursor: grabbing; }
+.tpl-stripe { width: 5px; border-radius: 6px 0 0 6px; flex-shrink: 0; }
+.tpl-body { flex: 1; padding: 7px 10px; min-width: 0; }
+.tpl-name { font-weight: 700; font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tpl-meta { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.tpl-edit { width: 26px; display: flex; align-items: center; justify-content: center; color: var(--brand); font-size: 14px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+.tpl-del { width: 26px; display: flex; align-items: center; justify-content: center; color: var(--danger); font-size: 16px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+
+.drag-ghost { position: fixed; pointer-events: none; z-index: 9999; padding: 6px 14px; border-radius: 6px; color: white; font-weight: 700; font-size: 12px; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,0.18); }
+
+.img-thumb-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.img-thumb { position: relative; width: 56px; height: 56px; border: 1px solid #d7e0f3; border-radius: 4px; overflow: hidden; background: #f4f7ff; }
+.img-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.img-thumb .img-del { position: absolute; top: 1px; right: 1px; width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.5); color: white; font-size: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.img-thumb.selected { outline: 2px solid var(--brand); }
+
+.event-meta { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+
+/* ========== Main ========== */
+.main { display: flex; flex-direction: column; min-width: 0; }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; gap: 8px; }
+.topbar h1 { font-size: 16px; }
+.topbar .sub { font-size: 10px; color: var(--muted); }
+.topbar-actions { display: flex; gap: 6px; }
+
+.cal-wrap { flex: 1; overflow-x: scroll; overflow-y: auto; min-height: 0; min-width: 0; margin: 0 14px 3px; border: 1px solid #c8d3eb; background: #f4f7ff; }
+.cal-wrap { scrollbar-width: auto; scrollbar-color: #a0b0d0 #e8edf8; }
+.cal-wrap::-webkit-scrollbar { width: 10px; height: 12px; }
+.cal-wrap::-webkit-scrollbar-track { background: #e8edf8; border-radius: 0; }
+.cal-wrap::-webkit-scrollbar-thumb { background: #a0b0d0; border-radius: 5px; border: 1px solid #d0d8ec; }
+.cal-wrap::-webkit-scrollbar-thumb:hover { background: #8898c0; }
+.cal-wrap::-webkit-scrollbar-corner { background: #e8edf8; }
+#calendar { position: relative; }
+
+.note-bar { height: 28px; display: flex; align-items: center; padding: 0 10px; background: #e8eeff; color: #566079; font-weight: 700; font-size: 10px; position: sticky; top: 0; z-index: 9; left: 0; }
+.month-row { display: flex; padding-left: 12px; position: sticky; top: 28px; z-index: 8; }
+.month-cell { display: flex; align-items: center; justify-content: center; height: 32px; border-right: 1px solid #d5dcff; background: #b9c2ff; color: #151b32; font-size: 16px; font-weight: 900; }
+.day-row { display: flex; border-bottom: 1px solid #d6def2; height: 36px; padding-left: 12px; position: sticky; top: 60px; z-index: 7; }
+.day-cell { display: flex; align-items: center; justify-content: center; border-right: 1px solid #dfe5f6; font-size: 11px; font-weight: 700; color: #687087; text-align: center; line-height: 1.3; }
+.day-cell.weekend { background: #eef3ff; }
+
+.grid-area { position: relative; }
+
+.today-line { position: absolute; top: 0; bottom: 0; width: 3px; background: var(--brand); z-index: 5; }
+.today-label { position: absolute; top: 4px; transform: translateX(-50%); padding: 2px 10px; border-radius: 4px; background: var(--brand); color: white; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.friday-block { position: absolute; top: 0; pointer-events: none; z-index: 0; }
+
+/* ========== Events ========== */
+.event { position: absolute; height: var(--ev-h); cursor: pointer; user-select: none; overflow: visible; }
+.event-shadow { position: absolute; left: 4px; top: 4px; right: 0; bottom: 0; border-radius: 5px; background: #c9d2e8; }
+.event-main { position: absolute; inset: 0; overflow: visible; }
+.event-inner { position: absolute; inset: 0; border-radius: 5px; border: 1px solid #ddd; background: var(--row); overflow: visible; box-shadow: 0 3px 12px rgba(80,95,140,0.15); }
+.event.active .event-inner { border-color: var(--brand); border-width: 2px; }
+.event-hdr { position: absolute; left: 0; top: 0; height: 26px; border-radius: 4px 0 0 0; color: white; font-weight: 700; font-size: 12px; display: flex; align-items: center; padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.event-range { position: absolute; left: 6px; top: -22px; font-size: 12px; font-weight: 800; color: #4a3f2e; white-space: nowrap; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff; letter-spacing: 0.3px; }
+.event-tag { position: absolute; left: 7px; bottom: 7px; padding: 2px 8px; border-radius: 9px; border: 1px solid #d6c9a8; background: #fff8e8; color: #7b653d; font-size: 10px; font-weight: 700; white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
+.event-end { position: absolute; right: 0; top: 0; width: 36px; height: 100%; border-radius: 0 5px 5px 0; display: flex; align-items: center; justify-content: center; color: white; font-size: 18px; font-weight: 700; }
+
+.event-imgs { position: absolute; left: 108px; right: 36px; top: 0; bottom: 0; pointer-events: none; }
+.event-imgs img { flex-shrink: 0; object-fit: contain; }
+
+/* ========== Context Menu ========== */
+.ctx-menu { position: fixed; z-index: 99999; background: white; border: 1px solid #d0d9ef; border-radius: 8px; box-shadow: 0 8px 28px rgba(40,55,100,0.2); padding: 4px 0; min-width: 140px; display: none; }
+.ctx-menu.show { display: block; }
+.ctx-item { padding: 8px 16px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.ctx-item:hover { background: #eef3ff; }
+.ctx-sep { height: 1px; background: #e0e6f5; margin: 4px 8px; }
+
+/* ========== Status ========== */
+.statusbar { height: 26px; display: flex; align-items: center; padding: 0 12px; font-size: 10px; color: var(--muted); }
+
+/* ========== Modal ========== */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 99998; display: none; align-items: center; justify-content: center; }
+.modal-overlay.show { display: flex; }
+.modal-box { background: white; border-radius: 10px; padding: 20px 24px; min-width: 300px; box-shadow: 0 12px 40px rgba(30,50,90,0.25); }
+.modal-box h3 { margin: 0 0 14px; font-size: 15px; }
+.modal-box .field { margin-bottom: 10px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* ========== Hidden file input ========== */
+.hidden-input { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-title">
+      <h2>活动日历</h2>
+      <p>拖模块进日历，拖活动改日期和位置</p>
+    </div>
+    <div class="side-scroll">
+
+      <!-- Time Panel -->
+      <div class="panel">
+        <div class="panel-hdr">时间</div>
+        <div class="panel-body">
+          <div class="field" style="display:none">
+            <label>起始日期</label>
+            <input id="startDate" type="date">
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>显示天数</label>
+              <input id="visibleDays" type="number" min="7" max="120">
+            </div>
+            <div class="field" style="padding-top:18px">
+              <button class="btn primary full" id="applyTime">应用时间设置</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Template Library -->
+      <div class="panel">
+        <div class="panel-hdr" style="display:flex; align-items:center; justify-content:space-between;">
+          <span>模块库</span>
+          <button class="btn-icon" id="toggleTpl" title="收起/展开">−</button>
+        </div>
+        <div class="panel-body" id="tplSection">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">按住卡片拖入右侧日历</div>
+          <div class="template-area" id="tplList"></div>
+
+
+        </div>
+      </div>
+
+      <!-- Event Editor -->
+      <div class="panel" id="editorPanel">
+        <div class="panel-hdr">当前活动</div>
+        <div class="panel-body">
+          <div id="evTitle" style="font-weight:700;font-size:13px;margin-bottom:6px;">未选择活动</div>
+          <div id="evMeta" class="event-meta"></div>
+          <button class="btn primary full" id="addImgBtn" style="margin-bottom:6px;">添加图片（支持透明PNG）</button>
+          <div class="img-thumb-grid" id="imgGrid"></div>
+          <div style="margin-top:6px;border-top:1px solid var(--panel-line);padding-top:6px;display:none;" id="imgControls">
+            <div class="field-row">
+              <div class="field">
+                <label>图片大小</label>
+                <input id="imgSize" type="number" min="18" max="160" step="2">
+              </div>
+            </div>
+            <div class="field-row" style="margin-bottom:6px;">
+              <div class="field">
+                <label>X偏移</label>
+                <input id="imgX" type="number" min="-300" max="900" step="2">
+              </div>
+              <div class="field">
+                <label>Y偏移</label>
+                <input id="imgY" type="number" min="-80" max="80" step="2">
+              </div>
+            </div>
+            <button class="btn full sm" id="applyImgBtn">应用图片大小/位置</button>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:8px;">
+            <button class="btn" style="flex:1;font-size:11px;" id="delImgBtn">删除图片</button>
+            <button class="btn danger" style="flex:1;font-size:11px;" id="delEvBtn">删除活动</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h1>活动排期</h1>
+        <div class="sub">当天 05:00 开始，结束日 04:59 结束</div>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn" id="fetchActivity">获取活动</button>
+      </div>
+    </div>
+
+    <div class="cal-wrap" id="calWrap">
+      <div id="calendar">
+        <div class="note-bar">日历时间以东八区标准时间为准</div>
+        <div class="month-row" id="monthRow"></div>
+        <div class="day-row" id="dayRow"></div>
+        <div class="grid-area" id="gridArea"></div>
+      </div>
+    </div>
+
+    <div class="statusbar" id="statusbar">左侧模块拖入日历；日历里的活动可上下左右拖动。</div>
+  </main>
+</div>
+
+<!-- Context Menu -->
+<div class="ctx-menu" id="ctxMenu">
+  <div class="ctx-item" data-action="add-img">添加图片</div>
+  <div class="ctx-item" data-action="rename">修改文字</div>
+  <div class="ctx-item" data-action="extend">延续</div>
+  <div class="ctx-item" data-action="color">修改颜色</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" data-action="delete" style="color:var(--danger)">删除活动</div>
+</div>
+
+<!-- Hidden file input for images -->
+<input type="file" accept="image/*" multiple id="imgFileInput" class="hidden-input">
+
+<!-- Template Editor Modal -->
+<div class="modal-overlay" id="tplEditorModal">
+  <div class="modal-box">
+    <h3>编辑模块</h3>
+    <div class="field"><label>名称</label><input id="teName" type="text"></div>
+    <div class="field-row">
+      <div class="field"><label>天数</label><input id="teDuration" type="number" min="1" max="400"></div>
+      <div class="field"><label>标签</label><input id="teTag" type="text"></div>
+    </div>
+    <div class="field"><label>颜色</label><input id="teColor" type="color" style="height:32px;"></div>
+    <div class="modal-actions">
+      <button class="btn" id="teCancel">取消</button>
+      <button class="btn primary" id="teSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ======================== Constants ========================
+const DAY_W = 52, ROW_H = 96, EV_H = 66, HDR_H = 96, PAD_L = 12, PAD_T = 28;
+const COLORS = { bg: "#eef3ff", panel: "#f8fbff", panel_line: "#d7e0f3", text: "#1d2842", muted: "#68758f", brand: "#5d6cff", grid: "#dce5f7", row: "#ffffff" };
+const DEFAULT_TEMPLATES = [
+  { name: "大版本", duration: 30, color: "#5d6cff", tag: "版本" },
+  { name: "幻灵召唤", duration: 14, color: "#ffad47", tag: "召唤" },
+  { name: "海神宝库", duration: 14, color: "#39a7d8", tag: "宝库" },
+  { name: "新神降临", duration: 42, color: "#a668ff", tag: "召唤" },
+  { name: "探宝寻珍", duration: 7, color: "#20a88a", tag: "活动" },
+  { name: "精选返场", duration: 7, color: "#f26d8a", tag: "返场" },
+  { name: "限定炼制", duration: 7, color: "#d89724", tag: "炼制" },
+  { name: "限定夺宝", duration: 7, color: "#6470a8", tag: "夺宝" },
+  { name: "限定创造", duration: 7, color: "#7558c8", tag: "创造" }
+];
+const STORAGE_KEY = "activity_calendar_data_v2";
+
+// ======================== State ========================
+let data = null;
+let selectedEventId = null;
+let selectedImageIdx = null;
+let templatesCollapsed = false;
+
+// Drag state
+let dragTpl = null;       // template being dragged from sidebar
+let dragTplEl = null;     // floating element
+let dragEvId = null;      // event being dragged within calendar
+let dragEvOrig = null;    // {clientX, clientY, start, row}
+
+// ======================== DOM refs ========================
+const $ = id => document.getElementById(id);
+const el = {
+  startDate: $('startDate'), visibleDays: $('visibleDays'), applyTime: $('applyTime'),
+  toggleTpl: $('toggleTpl'), tplSection: $('tplSection'), tplList: $('tplList'),
+
+  evTitle: $('evTitle'), evMeta: $('evMeta'), addImgBtn: $('addImgBtn'), imgGrid: $('imgGrid'),
+  imgControls: $('imgControls'), imgSize: $('imgSize'), imgX: $('imgX'), imgY: $('imgY'), applyImgBtn: $('applyImgBtn'),
+  delImgBtn: $('delImgBtn'), delEvBtn: $('delEvBtn'),
+  calWrap: $('calWrap'), calendar: $('calendar'), monthRow: $('monthRow'), dayRow: $('dayRow'), gridArea: $('gridArea'),
+  ctxMenu: $('ctxMenu'), imgFileInput: $('imgFileInput'), statusbar: $('statusbar'),
+
+  teModal: $('tplEditorModal'), teName: $('teName'), teDuration: $('teDuration'),
+  teTag: $('teTag'), teColor: $('teColor'), teSave: $('teSave'), teCancel: $('teCancel'),
+  fetchActivity: $('fetchActivity'),
+};
+
+// ======================== Date Helpers ========================
+function pad(n) { return String(n).padStart(2, '0'); }
+function todayISO() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function defaultStartISO() { return '2025-06-09'; }
+const FIXED_START = '2025-06-09';
+function parseDay(v) { const [y,m,d]=v.split('-').map(Number); return new Date(y,m-1,d); }
+function iso(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function addDays(v,n) { const d=typeof v==='string'?parseDay(v):new Date(v); d.setDate(d.getDate()+n); return d; }
+function diffDays(a,b) { return Math.round((parseDay(a)-parseDay(b))/86400000); }
+function clamp(v,l,h) { return Math.max(l,Math.min(h,v)); }
+function uid() { return `ev-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`; }
+
+// ======================== Data Management ========================
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+
+function defaultData() {
+  return {
+    timeline_start: '2025-06-09',
+    visible_days: 400,
+    templates: JSON.parse(JSON.stringify(DEFAULT_TEMPLATES)),
+    events: [
+      { name:"幻灵召唤", duration:14, start:"2025-06-09", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"大版本",   duration:30, start:"2025-06-16", color:"#5d6cff", tag:"版本", images:[], row:0 },
+      { name:"限定创造", duration:7,  start:"2025-06-20", color:"#7558c8", tag:"创造", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2025-06-20", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"限定夺宝", duration:7,  start:"2025-06-27", color:"#6470a8", tag:"夺宝", images:[], row:0 },
+      { name:"限定炼制", duration:7,  start:"2025-07-04", color:"#d89724", tag:"炼制", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2025-07-04", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"探宝寻珍", duration:7,  start:"2025-07-18", color:"#20a88a", tag:"活动", images:[], row:0 },
+      { name:"精选返场", duration:7,  start:"2025-07-18", color:"#f26d8a", tag:"返场", images:[], row:0 },
+      { name:"神话召唤", duration:14, start:"2025-07-18", color:"#e87bff", tag:"召唤", images:[], row:0 },
+      { name:"限定夺宝", duration:7,  start:"2025-07-25", color:"#6470a8", tag:"夺宝", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2025-07-25", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"限定炼制", duration:7,  start:"2025-08-01", color:"#d89724", tag:"炼制", images:[], row:0 },
+      { name:"限定创造", duration:7,  start:"2025-08-08", color:"#7558c8", tag:"创造", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2025-08-08", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"精选返场", duration:7,  start:"2025-08-15", color:"#f26d8a", tag:"返场", images:[], row:0 },
+      { name:"限定夺宝", duration:7,  start:"2025-08-15", color:"#6470a8", tag:"夺宝", images:[], row:0 },
+      { name:"限定炼制", duration:7,  start:"2025-08-22", color:"#d89724", tag:"炼制", images:[], row:0 },
+      { name:"甜蜜进行时", duration:14, start:"2025-08-22", color:"#ff6f91", tag:"活动", images:[], row:0 },
+      { name:"大版本",   duration:29, start:"2025-08-22", color:"#5d6cff", tag:"版本", images:[], row:0 },
+      { name:"限定创造", duration:7,  start:"2025-08-29", color:"#7558c8", tag:"创造", images:[], row:0 },
+      { name:"神话召唤", duration:14, start:"2025-08-29", color:"#e87bff", tag:"召唤", images:[], row:0 },
+      { name:"限定夺宝", duration:7,  start:"2025-09-05", color:"#6470a8", tag:"夺宝", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2025-09-05", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"探宝寻珍", duration:7,  start:"2025-09-12", color:"#20a88a", tag:"活动", images:[], row:0 },
+      { name:"限定炼制", duration:7,  start:"2025-09-12", color:"#d89724", tag:"炼制", images:[], row:0 },
+      { name:"限定创造", duration:7,  start:"2025-09-19", color:"#7558c8", tag:"创造", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2025-09-19", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"限定夺宝", duration:7,  start:"2025-09-26", color:"#6470a8", tag:"夺宝", images:[], row:0 },
+      { name:"精选返场", duration:7,  start:"2025-09-26", color:"#f26d8a", tag:"返场", images:[], row:0 },
+      { name:"海神宝库", duration:14, start:"2025-09-26", color:"#39a7d8", tag:"宝库", images:[], row:0 },
+      { name:"限定炼制", duration:7,  start:"2025-10-03", color:"#d89724", tag:"炼制", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2025-10-03", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"限定创造", duration:7,  start:"2025-10-10", color:"#7558c8", tag:"创造", images:[], row:0 },
+      { name:"神话召唤", duration:14, start:"2025-10-10", color:"#e87bff", tag:"召唤", images:[], row:0 },
+      { name:"限定夺宝", duration:7,  start:"2025-10-17", color:"#6470a8", tag:"夺宝", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2025-10-17", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"大版本",   duration:30, start:"2025-10-17", color:"#5d6cff", tag:"版本", images:[], row:0 },
+      { name:"精选返场", duration:7,  start:"2025-10-24", color:"#f26d8a", tag:"返场", images:[], row:0 },
+      { name:"限定炼制", duration:7,  start:"2025-10-24", color:"#d89724", tag:"炼制", images:[], row:0 },
+      { name:"海神宝库", duration:14, start:"2025-10-24", color:"#39a7d8", tag:"宝库", images:[], row:0 },
+      { name:"限定创造", duration:7,  start:"2025-10-31", color:"#7558c8", tag:"创造", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2025-10-31", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"探宝寻珍", duration:7,  start:"2025-11-07", color:"#20a88a", tag:"活动", images:[], row:0 },
+      { name:"限定夺宝", duration:7,  start:"2025-11-07", color:"#6470a8", tag:"夺宝", images:[], row:0 },
+      { name:"限定炼制", duration:7,  start:"2025-11-14", color:"#d89724", tag:"炼制", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2025-11-14", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"限定创造", duration:7,  start:"2025-11-21", color:"#7558c8", tag:"创造", images:[], row:0 },
+      { name:"神话召唤", duration:14, start:"2025-11-21", color:"#e87bff", tag:"召唤", images:[], row:0 },
+      { name:"限定夺宝", duration:7,  start:"2025-11-28", color:"#6470a8", tag:"夺宝", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2025-11-28", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"限定炼制", duration:7,  start:"2025-12-05", color:"#d89724", tag:"炼制", images:[], row:0 },
+      { name:"精选返场", duration:7,  start:"2025-12-05", color:"#f26d8a", tag:"返场", images:[], row:0 },
+      { name:"海神宝库", duration:14, start:"2025-12-05", color:"#39a7d8", tag:"宝库", images:[], row:0 },
+      { name:"限定创造", duration:7,  start:"2025-12-12", color:"#7558c8", tag:"创造", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2025-12-12", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"大版本",   duration:14, start:"2025-12-12", color:"#5d6cff", tag:"版本", images:[], row:0 },
+      { name:"探宝寻珍", duration:7,  start:"2025-12-19", color:"#20a88a", tag:"活动", images:[], row:0 },
+      { name:"限定夺宝", duration:7,  start:"2025-12-19", color:"#6470a8", tag:"夺宝", images:[], row:0 },
+      { name:"限定炼制", duration:14, start:"2025-12-26", color:"#d89724", tag:"炼制", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2025-12-26", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"限定创造", duration:7,  start:"2026-01-02", color:"#7558c8", tag:"创造", images:[], row:0 },
+      { name:"神话召唤", duration:14, start:"2026-01-02", color:"#e87bff", tag:"召唤", images:[], row:0 },
+      { name:"限定夺宝", duration:7,  start:"2026-01-09", color:"#6470a8", tag:"夺宝", images:[], row:0 },
+      { name:"幻灵召唤", duration:14, start:"2026-01-09", color:"#ffad47", tag:"召唤", images:[], row:0 },
+      { name:"精选返场", duration:7,  start:"2026-01-16", color:"#f26d8a", tag:"返场", images:[], row:0 },
+      { name:"限定炼制", duration:7,  start:"2026-01-16", color:"#d89724", tag:"炼制", images:[], row:0 },
+      { name:"海神宝库", duration:14, start:"2026-01-16", color:"#39a7d8", tag:"宝库", images:[], row:0 },
+    ]
+  };
+}
+
+function initData() {
+  let d = loadData();
+  if (!d) { d = defaultData(); d._applyPack = true; }
+  d.timeline_start = d.timeline_start || defaultStartISO();
+  d.visible_days = d.visible_days || 400;
+  d.templates = d.templates || JSON.parse(JSON.stringify(DEFAULT_TEMPLATES));
+  d.events = d.events || [];
+  migrateTemplates(d.templates);
+  d.events.forEach(ev => {
+    ev.id = ev.id || uid();
+    ev.row = ev.row || 0;
+    ev.images = ev.images || [];
+    ev.images.forEach(img => { img.id = img.id || uid(); img.size = img.size||80; img.x = img.x||50; img.y = img.y||-10; });
+  });
+  return d;
+}
+
+function migrateTemplates(tpls) {
+  let hasNewGod = false;
+  tpls.forEach(t => {
+    if (t.name === '神话召唤' || t.name === '新神降临') {
+      t.name = '新神降临'; t.duration = 42; t.color = '#a668ff'; t.tag = '召唤'; hasNewGod = true;
+    }
+  });
+  if (!hasNewGod) tpls.splice(3, 0, JSON.parse(JSON.stringify(DEFAULT_TEMPLATES[3])));
+}
+
+function saveData(quiet) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  if (!quiet) setStatus('已保存到本地存储');
+}
+
+function setStatus(msg) { el.statusbar.textContent = msg; }
+
+// ======================== Find helpers ========================
+function findEvent(id) { return data.events.find(e => e.id === id); }
+
+function findAvailableRow(ev, excludeId) {
+  const events = data.events.filter(e => e.id !== excludeId && e.id !== ev.id);
+  const newStart = parseDay(ev.start);
+  const newEnd = addDays(newStart, ev.duration);
+  function conflicts(row) {
+    return events.some(e => {
+      if ((e.row || 0) !== row) return false;
+      const es = parseDay(e.start);
+      const ee = addDays(es, e.duration);
+      return newStart < ee && newEnd > es;
+    });
+  }
+  const maxR = Math.max(...data.events.map(e => (e.row||0)), 20);
+  for (let off = 0; off <= maxR + 20; off++) {
+    for (const c of [ev.row + off, ev.row - off]) {
+      if (c >= 0 && !conflicts(c)) return c;
+    }
+  }
+  return maxR + 1;
+}
+
+function packRows() {
+  // Greedy: latest dates first (top rows), assign lowest non-conflicting row
+  const sorted = [...data.events].sort((a,b) => b.start.localeCompare(a.start) || (a.row||0) - (b.row||0));
+  const placed = []; // {start, duration, row}
+  sorted.forEach(ev => {
+    let row = 0;
+    for (;; row++) {
+      const conflict = placed.some(p => {
+        if (p.row !== row) return false;
+        const eStart = parseDay(ev.start);
+        const eEnd = addDays(eStart, ev.duration);
+        return eStart < addDays(parseDay(p.start), p.duration) && eEnd > parseDay(p.start);
+      });
+      if (!conflict) { ev.row = row; placed.push({ start: ev.start, duration: ev.duration, row }); break; }
+    }
+  });
+}
+
+// ======================== Template Rendering ========================
+function renderTemplates() {
+  el.tplList.innerHTML = '';
+  if (templatesCollapsed) return;
+  data.templates.forEach((tpl, i) => {
+    const card = document.createElement('div');
+    card.className = 'tpl-card';
+    card.innerHTML = `
+      <div class="tpl-stripe" style="background:${tpl.color}"></div>
+      <div class="tpl-body">
+        <div class="tpl-name">${esc(tpl.name)}</div>
+        <div class="tpl-meta">${tpl.duration}天 · ${tpl.tag||'活动'}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:2px;flex-shrink:0;padding:0 4px;">
+        <div class="tpl-edit" data-idx="${i}">✎</div>
+        ${(tpl.custom || i >= DEFAULT_TEMPLATES.length) ? `<div class="tpl-del" data-idx="${i}">×</div>` : ''}
+      </div>
+    `;
+    // Drag start
+    card.addEventListener('mousedown', e => {
+      if (e.target.classList.contains('tpl-del') || e.target.classList.contains('tpl-edit')) return;
+      e.preventDefault();
+      dragTpl = JSON.parse(JSON.stringify(tpl));
+      dragTplEl = document.createElement('div');
+      dragTplEl.className = 'drag-ghost';
+      dragTplEl.style.background = tpl.color;
+      dragTplEl.textContent = `${tpl.name} · ${tpl.duration}天`;
+      document.body.appendChild(dragTplEl);
+      moveGhost(e);
+      document.addEventListener('mousemove', onTplMove);
+      document.addEventListener('mouseup', onTplUp);
+    });
+    // Delete
+    const del = card.querySelector('.tpl-del');
+    if (del) del.addEventListener('click', e => {
+      e.stopPropagation();
+      if (confirm(`确定从模块库删除"${tpl.name}"？`)) {
+        data.templates.splice(i, 1);
+        saveData(true); renderTemplates(); renderCalendar();
+      }
+    });
+    // Edit
+    const edit = card.querySelector('.tpl-edit');
+    if (edit) edit.addEventListener('click', e => {
+      e.stopPropagation();
+      openTplEditor(i);
+    });
+    el.tplList.appendChild(card);
+  });
+}
+
+function moveGhost(e) {
+  if (!dragTplEl) return;
+  dragTplEl.style.left = (e.clientX + 10) + 'px';
+  dragTplEl.style.top = (e.clientY + 10) + 'px';
+}
+
+function onTplMove(e) { moveGhost(e); }
+
+function onTplUp(e) {
+  document.removeEventListener('mousemove', onTplMove);
+  document.removeEventListener('mouseup', onTplUp);
+  if (dragTplEl) { dragTplEl.remove(); dragTplEl = null; }
+  if (!dragTpl) return;
+  const wrap = el.calWrap;
+  const r = wrap.getBoundingClientRect();
+  if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+    const scrollLeft = wrap.scrollLeft, scrollTop = wrap.scrollTop;
+    const cx = e.clientX - r.left + scrollLeft;
+    const cy = e.clientY - r.top + scrollTop;
+    const dayIdx = clamp(Math.round((cx - PAD_L) / DAY_W), 0, data.visible_days - 1);
+    const rowIdx = Math.max(0, Math.round((cy - HDR_H - PAD_T) / ROW_H));
+    const ev = {
+      id: uid(), name: dragTpl.name, duration: dragTpl.duration,
+      start: iso(addDays(data.timeline_start, dayIdx)), row: rowIdx,
+      color: dragTpl.color, tag: dragTpl.tag || '', images: []
+    };
+    ev.row = findAvailableRow(ev, null);
+    data.events.push(ev);
+    selectedEventId = ev.id;
+    saveData(true);
+    renderAll();
+    setStatus(`已添加：${ev.name}，${formatRange(ev)}`);
+  }
+  dragTpl = null;
+}
+
+// ======================== Calendar Rendering ========================
+function renderCalendar() {
+  const vd = data.visible_days;
+  const totalW = PAD_L * 2 + vd * DAY_W;
+  const maxRow = Math.max(...data.events.map(e => e.row || 0), 6);
+  const totalH = HDR_H + PAD_T + (maxRow + 1) * ROW_H;
+  el.calendar.style.width = (totalW + 36) + 'px';
+  el.calendar.style.height = (totalH + 36) + 'px';
+
+  renderNoteBar();
+  renderMonths();
+  renderDays();
+  renderGrid(vd, totalH);
+  renderTodayLine(vd);
+  renderEvents();
+}
+
+function renderNoteBar() {
+  // already in HTML
+}
+
+function renderMonths() {
+  el.monthRow.innerHTML = '';
+  const start = parseDay(data.timeline_start);
+  const groups = [];
+  for (let i = 0; i < data.visible_days; i++) {
+    const cur = addDays(start, i);
+    const monthKey = cur.getFullYear() + '-' + cur.getMonth();
+    const last = groups[groups.length-1];
+    if (last && last.key === monthKey) { last.cnt++; }
+    else { groups.push({ key: monthKey, m: cur.getMonth()+1, cnt: 1 }); }
+  }
+  groups.forEach(g => {
+    const cell = document.createElement('div');
+    cell.className = 'month-cell';
+    cell.style.width = (g.cnt * DAY_W) + 'px';
+    cell.style.justifyContent = g.cnt > 3 ? 'center' : 'flex-start';
+    cell.style.paddingLeft = g.cnt <= 3 ? '12px' : '0';
+    cell.textContent = g.m + '月';
+    el.monthRow.appendChild(cell);
+  });
+  // Fixed right cell fills remaining width
+  const totalW = PAD_L + data.visible_days * DAY_W;
+  const usedW = groups.reduce((s, g) => s + g.cnt * DAY_W, 0);
+  const fillW = totalW - usedW;
+  if (fillW > 0) {
+    const cell = document.createElement('div');
+    cell.className = 'month-cell';
+    cell.style.width = fillW + 'px';
+    cell.style.background = 'transparent';
+    el.monthRow.appendChild(cell);
+  }
+}
+
+function renderDays() {
+  el.dayRow.innerHTML = '';
+  const start = parseDay(data.timeline_start);
+  const weekNames = '一二三四五六日';
+  for (let i = 0; i < data.visible_days; i++) {
+    const d = addDays(start, i);
+    const cell = document.createElement('div');
+    cell.className = 'day-cell' + (d.getDay() === 0 || d.getDay() === 6 ? ' weekend' : '');
+    cell.style.width = DAY_W + 'px';
+    cell.style.height = '36px';
+    cell.innerHTML = `${pad(d.getMonth()+1)}/${pad(d.getDate())}<br>周${weekNames[d.getDay()]}`;
+    el.dayRow.appendChild(cell);
+  }
+}
+
+function renderGrid(vd, totalH) {
+  const ga = el.gridArea;
+  ga.innerHTML = '';
+  ga.style.height = (totalH - HDR_H) + 'px';
+  // Grid lines via CSS
+  const gridW = vd * DAY_W;
+  ga.style.marginLeft = PAD_L + 'px';
+  ga.style.width = gridW + 'px';
+
+  // Horizontal grid lines (CSS)
+  const hLines = Math.ceil((totalH - HDR_H) / ROW_H) + 1;
+  for (let r = 0; r <= hLines; r++) {
+    const line = document.createElement('div');
+    line.style.cssText = `position:absolute;left:0;right:0;top:${r * ROW_H}px;height:1px;background:#e4e9f8;pointer-events:none;`;
+    ga.appendChild(line);
+  }
+
+  // Vertical grid lines via CSS repeating gradient
+  ga.style.background = `repeating-linear-gradient(to right, transparent 0px, transparent ${DAY_W-1}px, var(--grid) ${DAY_W-1}px, var(--grid) ${DAY_W}px)`;
+
+  // Friday-to-Friday week blocks
+  const startDate = parseDay(data.timeline_start);
+  const firstFri = (5 - startDate.getDay() + 7) % 7;
+  for (let wkStart = firstFri; wkStart < vd; wkStart += 7) {
+    const wkEnd = Math.min(wkStart + 7, vd);
+    const block = document.createElement('div');
+    block.className = 'friday-block';
+    block.style.left = (wkStart * DAY_W) + 'px';
+    block.style.width = ((wkEnd - wkStart) * DAY_W) + 'px';
+    block.style.height = '100%';
+    const weekNum = Math.floor((wkStart - firstFri) / 7);
+    block.style.background = weekNum % 2 === 0 ? 'rgba(93,108,255,0.08)' : 'rgba(57,167,216,0.08)';
+    ga.appendChild(block);
+  }
+}
+
+function renderTodayLine(vd) {
+  const start = parseDay(data.timeline_start);
+  const today = new Date();
+  const offset = Math.round((today - start) / 86400000);
+  if (offset >= 0 && offset <= vd) {
+    const x = offset * DAY_W;
+    const line = document.createElement('div');
+    line.className = 'today-line';
+    line.style.left = x + 'px';
+    const label = document.createElement('div');
+    label.className = 'today-label';
+    label.textContent = `今日 ${today.getMonth()+1}/${today.getDate()}`;
+    line.appendChild(label);
+    el.gridArea.appendChild(line);
+  }
+}
+
+// ======================== Event Rendering ========================
+function renderEvents() {
+  const sorted = [...data.events].sort((a,b) => (a.row||0) - (b.row||0) || a.start.localeCompare(b.start));
+  sorted.forEach(ev => {
+    const geom = eventGeometry(ev);
+    if (!geom) return;
+    const { x, y, w } = geom;
+    const tag = ev.id;
+    const isActive = ev.id === selectedEventId;
+    const color = ev.color || '#ffad47';
+
+    const elEv = document.createElement('div');
+    elEv.className = 'event' + (isActive ? ' active' : '');
+    elEv.style.left = x + 'px';
+    elEv.style.top = y + 'px';
+    elEv.style.width = w + 'px';
+    elEv.dataset.evId = ev.id;
+
+    const nameW = Math.min(154, w);
+    const nameOffset = w > 154 ? 0 : (w - 154) / 2;
+
+    let imgsHtml = '';
+    let imgXPos = 0;
+    (ev.images || []).slice(0, 12).forEach((img, idx) => {
+      const sz = Number(img.size) || 42;
+      const ox = Number(img.x) || 0;
+      const oy = Number(img.y) || 0;
+      imgsHtml += `<img src="${img.data}" style="position:absolute;width:${sz}px;height:${sz}px;left:${imgXPos + ox}px;top:50%;transform:translateY(-50%) translateY(${oy}px);object-fit:contain;" title="${esc(img.name||'')}">`;
+      imgXPos += sz + 7;
+    });
+
+    elEv.innerHTML = `
+      <div class="event-shadow"></div>
+      <div class="event-main">
+        <div class="event-inner">
+          <div class="event-hdr" style="background:${color};width:${nameW}px;${nameOffset>0?`left:${nameOffset}px`:''}">${esc(ev.name)}</div>
+          <div class="event-range">${formatRange(ev)}</div>
+          <div class="event-tag">${esc(ev.tag || ev.duration + '天')}</div>
+          <div class="event-end" style="background:${color}">›</div>
+          <div class="event-imgs">${imgsHtml}</div>
+        </div>
+      </div>
+    `;
+
+    // Click to select
+    elEv.addEventListener('click', e => {
+      e.stopPropagation();
+      selectedEventId = ev.id;
+      renderAll();
+    });
+
+    // Right-click
+    elEv.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      selectedEventId = ev.id;
+      renderAll();
+      showCtxMenu(e.clientX, e.clientY, ev.id);
+    });
+
+    // Drag to change date/row
+    elEv.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      // Don't start drag if clicking on an image or button
+      if (e.target.closest('.event-imgs')) return;
+      e.preventDefault();
+      dragEvId = ev.id;
+      dragEvOrig = { clientX: e.clientX, clientY: e.clientY, start: ev.start, row: ev.row || 0 };
+      document.addEventListener('mousemove', onEvDrag);
+      document.addEventListener('mouseup', onEvDrop);
+    });
+
+    el.gridArea.appendChild(elEv);
+  });
+}
+
+function eventGeometry(ev) {
+  const startOffset = diffDays(ev.start, data.timeline_start);
+  const vd = data.visible_days;
+  if (startOffset >= vd || startOffset + ev.duration <= 0) return null;
+  const visibleLeft = Math.max(0, startOffset);
+  const clippedBefore = Math.max(0, -startOffset);
+  const visibleDur = Math.min(ev.duration - clippedBefore, vd - visibleLeft);
+  if (visibleDur <= 0) return null;
+  const x = visibleLeft * DAY_W + 2;
+  const y = HDR_H + PAD_T + (ev.row || 0) * ROW_H;
+  const w = Math.max(190, visibleDur * DAY_W - 4);
+  return { x, y, w, h: EV_H };
+}
+
+function formatRange(ev) {
+  const start = parseDay(ev.start);
+  const end = addDays(start, ev.duration);
+  return `${pad(start.getMonth()+1)}/${pad(start.getDate())} 05:00-${pad(end.getMonth()+1)}/${pad(end.getDate())} 04:59`;
+}
+
+function esc(v) {
+  if (v == null) return '';
+  return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ======================== Event Drag ========================
+function onEvDrag(e) {
+  if (!dragEvId || !dragEvOrig) return;
+  const ev = findEvent(dragEvId);
+  if (!ev) return;
+  const wrap = el.calWrap;
+  const r = wrap.getBoundingClientRect();
+  // Use calendar coordinates
+  const calX = e.clientX - r.left + wrap.scrollLeft;
+  const calY = e.clientY - r.top + wrap.scrollTop;
+  const dayIdx = Math.round((calX - PAD_L - 2 - (dragEvOrig.clientX - r.left - PAD_L - 2 + wrap.scrollLeft) + (diffDays(dragEvOrig.start, data.timeline_start) * DAY_W)) / DAY_W);
+  // Simpler: use delta from origin
+  const dx = e.clientX - dragEvOrig.clientX;
+  const dy = e.clientY - dragEvOrig.clientY;
+  const dayDelta = Math.round(dx / DAY_W);
+  const rowDelta = Math.round(dy / ROW_H);
+  const newStart = iso(addDays(dragEvOrig.start, dayDelta));
+  const newRow = Math.max(0, dragEvOrig.row + rowDelta);
+  if (ev.start !== newStart || ev.row !== newRow) {
+    ev.start = newStart;
+    ev.row = newRow;
+    renderAll();
+    setStatus(`${ev.name}：第${newRow+1}行，${formatRange(ev)}`);
+  }
+}
+
+function onEvDrop(e) {
+  document.removeEventListener('mousemove', onEvDrag);
+  document.removeEventListener('mouseup', onEvDrop);
+  if (dragEvId) {
+    saveData(true);
+  }
+  dragEvId = null; dragEvOrig = null;
+}
+
+// ======================== Context Menu ========================
+let ctxEvId = null;
+
+function showCtxMenu(x, y, evId) {
+  ctxEvId = evId;
+  const menu = el.ctxMenu;
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+  menu.classList.add('show');
+}
+
+document.addEventListener('click', e => {
+  if (!el.ctxMenu.contains(e.target)) el.ctxMenu.classList.remove('show');
+});
+
+el.ctxMenu.addEventListener('click', e => {
+  const action = e.target.dataset.action;
+  if (!action || !ctxEvId) return;
+  el.ctxMenu.classList.remove('show');
+  const ev = findEvent(ctxEvId);
+  if (!ev) return;
+  switch (action) {
+    case 'add-img': triggerImageUpload(ev.id); break;
+    case 'rename': renameEvent(ev.id); break;
+    case 'extend': extendEvent(ev.id); break;
+    case 'color': changeEventColor(ev.id); break;
+    case 'delete': deleteEvent(ev.id); break;
+  }
+});
+
+// ======================== Event Operations ========================
+function triggerImageUpload(evId) {
+  selectedEventId = evId;
+  el.imgFileInput.click();
+}
+
+el.imgFileInput.addEventListener('change', async () => {
+  const ev = findEvent(selectedEventId);
+  if (!ev) return;
+  const files = Array.from(el.imgFileInput.files || []);
+  for (const file of files) {
+    try {
+      const dataUrl = await readFileAsDataURL(file);
+      ev.images.push({
+        id: uid(), name: file.name, size: 80, x: 50, y: -10, data: dataUrl
+      });
+    } catch(e) { console.error(e); }
+  }
+  el.imgFileInput.value = '';
+  saveData(true);
+  renderAll();
+});
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+function extendEvent(evId) {
+  const ev = findEvent(evId);
+  if (!ev) return;
+  const newEv = JSON.parse(JSON.stringify(ev));
+  newEv.id = uid();
+  newEv.start = iso(addDays(ev.start, ev.duration));
+  newEv.images.forEach(img => { img.id = uid(); });
+  data.events.push(newEv);
+  selectedEventId = newEv.id;
+  saveData(true);
+  renderAll();
+  setStatus(`已延续：${newEv.name}，${formatRange(newEv)}`);
+}
+
+function changeEventColor(evId) {
+  const ev = findEvent(evId);
+  if (!ev) return;
+  const input = document.createElement('input');
+  input.type = 'color';
+  input.value = ev.color || '#ffad47';
+  input.addEventListener('input', () => {
+    ev.color = input.value;
+    saveData(true);
+    renderAll();
+  });
+  input.addEventListener('change', () => { input.remove(); });
+  input.click();
+  document.body.appendChild(input);
+  // Remove after a delay in case user doesn't click
+  setTimeout(() => { if (input.parentNode) input.remove(); }, 60000);
+}
+
+function deleteEvent(evId) {
+  const ev = findEvent(evId);
+  if (!ev) return;
+  if (!confirm(`确定删除"${ev.name}"？`)) return;
+  data.events = data.events.filter(e => e.id !== evId);
+  if (selectedEventId === evId) selectedEventId = null;
+  saveData(true);
+  renderAll();
+}
+
+function renameEvent(evId) {
+  const ev = findEvent(evId);
+  if (!ev) return;
+  const name = prompt('修改活动名称：', ev.name);
+  if (name && name.trim()) {
+    ev.name = name.trim();
+    saveData(true);
+    renderAll();
+    setStatus(`已重命名为：${ev.name}`);
+  }
+}
+
+// ======================== Sidebar: Event Editor ========================
+function renderEditor() {
+  const ev = findEvent(selectedEventId);
+  el.imgControls.style.display = 'none';
+  el.imgGrid.innerHTML = '';
+
+  if (!ev) {
+    el.evTitle.textContent = '未选择活动';
+    el.evMeta.textContent = '';
+    selectedImageIdx = null;
+    return;
+  }
+  el.evTitle.textContent = `${ev.name}  ·  第${(ev.row||0)+1}行`;
+  el.evMeta.textContent = `${ev.duration}天  ·  ${ev.tag||'无标签'}  ·  ${(ev.images||[]).length}张图片`;
+
+  // Reset image selection when switching events
+  if (selectedEventId !== (window._lastSelEv || '')) {
+    selectedImageIdx = null;
+  }
+  window._lastSelEv = selectedEventId;
+  const prevSelected = selectedImageIdx;
+  selectedImageIdx = null;
+
+  // Image thumbnails
+  (ev.images || []).forEach((img, i) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'img-thumb' + (i === prevSelected ? ' selected' : '');
+    thumb.innerHTML = `<img src="${img.data}" alt=""><div class="img-del" data-idx="${i}">×</div>`;
+    thumb.querySelector('.img-del').addEventListener('click', e => {
+      e.stopPropagation();
+      ev.images.splice(i, 1);
+      selectedImageIdx = null;
+      saveData(true);
+      renderAll();
+    });
+    thumb.addEventListener('click', () => {
+      selectedImageIdx = i;
+      el.imgControls.style.display = 'block';
+      el.imgSize.value = img.size || 80;
+      el.imgX.value = img.x || 50;
+      el.imgY.value = img.y || -10;
+      renderAll();
+    });
+    el.imgGrid.appendChild(thumb);
+  });
+
+  // Restore image selection after render
+  if (prevSelected !== null && prevSelected < (ev.images||[]).length) {
+    selectedImageIdx = prevSelected;
+    el.imgControls.style.display = 'block';
+  }
+}
+
+el.applyImgBtn.addEventListener('click', () => {
+  const ev = findEvent(selectedEventId);
+  if (!ev || selectedImageIdx == null || selectedImageIdx >= (ev.images||[]).length) return;
+  const img = ev.images[selectedImageIdx];
+  img.size = clamp(Number(el.imgSize.value) || 80, 18, 160);
+  img.x = clamp(Number(el.imgX.value) || 0, -300, 900);
+  img.y = clamp(Number(el.imgY.value) || 0, -80, 80);
+  saveData(true);
+  renderAll();
+  // Re-select
+  setTimeout(() => renderAll(), 0);
+});
+
+el.delImgBtn.addEventListener('click', () => {
+  const ev = findEvent(selectedEventId);
+  if (!ev || selectedImageIdx == null) return;
+  ev.images.splice(selectedImageIdx, 1);
+  selectedImageIdx = null;
+  el.imgControls.style.display = 'none';
+  saveData(true);
+  renderAll();
+});
+
+el.delEvBtn.addEventListener('click', () => deleteEvent(selectedEventId));
+el.addImgBtn.addEventListener('click', () => {
+  if (!selectedEventId) { alert('请先点击一个日历里的活动条'); return; }
+  el.imgFileInput.click();
+});
+
+// ======================== Static 2026 Announcement Events ========================
+// Compiled from official TapTap / 九游 announcements (2026-01 to 2026-05)
+const ANNOUNCEMENT_EVENTS = [
+  // January 2026 (missed from initial population)
+  { name:"限定创造", duration:7,  start:"2026-01-23", color:"#7558c8", tag:"创造" },
+  { name:"幻灵召唤", duration:14, start:"2026-01-23", color:"#ffad47", tag:"召唤" },
+  { name:"限定夺宝", duration:7,  start:"2026-01-30", color:"#6470a8", tag:"夺宝" },
+  { name:"探宝寻珍", duration:7,  start:"2026-01-30", color:"#20a88a", tag:"活动" },
+  { name:"精选返场", duration:7,  start:"2026-01-30", color:"#f26d8a", tag:"返场" },
+  // February 2026
+  { name:"幻灵召唤", duration:14, start:"2026-02-06", color:"#ffad47", tag:"召唤" },
+  { name:"限定炼制", duration:7,  start:"2026-02-06", color:"#d89724", tag:"炼制" },
+  { name:"限定创造", duration:7,  start:"2026-02-13", color:"#7558c8", tag:"创造" },
+  { name:"幻灵召唤", duration:14, start:"2026-02-20", color:"#ffad47", tag:"召唤" },
+  { name:"限定夺宝", duration:7,  start:"2026-02-20", color:"#6470a8", tag:"夺宝" },
+  { name:"海神宝库", duration:14, start:"2026-02-27", color:"#39a7d8", tag:"宝库" },
+  // March 2026
+  { name:"幻灵召唤", duration:14, start:"2026-03-06", color:"#ffad47", tag:"召唤" },
+  { name:"限定创造", duration:7,  start:"2026-03-06", color:"#7558c8", tag:"创造" },
+  { name:"幻灵召唤", duration:14, start:"2026-03-20", color:"#ffad47", tag:"召唤" },
+  { name:"限定炼制", duration:7,  start:"2026-03-20", color:"#d89724", tag:"炼制" },
+  { name:"限定创造", duration:7,  start:"2026-03-27", color:"#7558c8", tag:"创造" },
+  // April 2026
+  { name:"幻灵召唤", duration:14, start:"2026-04-03", color:"#ffad47", tag:"召唤" },
+  { name:"海神宝库", duration:14, start:"2026-04-10", color:"#39a7d8", tag:"宝库" },
+  { name:"限定炼制", duration:7,  start:"2026-04-10", color:"#d89724", tag:"炼制" },
+  { name:"精选返场", duration:7,  start:"2026-04-10", color:"#f26d8a", tag:"返场" },
+  { name:"幻灵召唤", duration:14, start:"2026-04-17", color:"#ffad47", tag:"召唤" },
+  { name:"限定创造", duration:7,  start:"2026-04-17", color:"#7558c8", tag:"创造" },
+  { name:"限定夺宝", duration:7,  start:"2026-04-24", color:"#6470a8", tag:"夺宝" },
+  { name:"探宝寻珍", duration:7,  start:"2026-04-24", color:"#20a88a", tag:"活动" },
+  { name:"精选返场", duration:7,  start:"2026-04-24", color:"#f26d8a", tag:"返场" },
+  // May 2026
+  { name:"幻灵召唤", duration:14, start:"2026-05-01", color:"#ffad47", tag:"召唤" },
+  { name:"限定创造", duration:7,  start:"2026-05-08", color:"#7558c8", tag:"创造" },
+  { name:"幻灵召唤", duration:14, start:"2026-05-15", color:"#ffad47", tag:"召唤" },
+  { name:"限定夺宝", duration:7,  start:"2026-05-15", color:"#6470a8", tag:"夺宝" },
+  { name:"海神宝库", duration:14, start:"2026-05-22", color:"#39a7d8", tag:"宝库" },
+  { name:"限定炼制", duration:7,  start:"2026-05-22", color:"#d89724", tag:"炼制" },
+];
+
+el.fetchActivity.addEventListener('click', function() {
+  const before = data.events.length;
+  const existingKeys = new Set(data.events.map(e => `${e.name}_${e.start}`));
+  let added = 0;
+  ANNOUNCEMENT_EVENTS.forEach(ev => {
+    const key = `${ev.name}_${ev.start}`;
+    if (existingKeys.has(key)) return;
+    existingKeys.add(key);
+    const newEv = {
+      id: uid(), name: ev.name, duration: ev.duration,
+      start: ev.start, row: 0, color: ev.color, tag: ev.tag, images: []
+    };
+    data.events.push(newEv);
+    // Assign a non-conflicting row without disrupting existing ones
+    newEv.row = findAvailableRow(newEv, null);
+    added++;
+  });
+  if (added === 0) {
+    setStatus('所有公告活动已存在，无新增');
+    return;
+  }
+  saveData(true);
+  renderAll();
+  setStatus(`已添加 ${added} 个公告活动（${ANNOUNCEMENT_EVENTS.length} 条公告数据）`);
+});
+
+// ======================== Export Image (Canvas) ========================
+function exportCalendarImage() {
+  const vd = data.visible_days;
+  const totalW = PAD_L * 2 + vd * DAY_W;
+  const maxRow = Math.max(...data.events.map(e => e.row || 0), 6);
+  const totalH = HDR_H + PAD_T + (maxRow + 4) * ROW_H;
+  const scale = 1.5;
+  const cw = Math.ceil((totalW + 36) * scale);
+  const ch = Math.ceil((totalH + 36) * scale);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
+
+  // Background
+  ctx.fillStyle = '#eef3ff';
+  ctx.fillRect(0, 0, cw/scale, ch/scale);
+  ctx.fillStyle = '#f4f7ff';
+  ctx.fillRect(0, 0, totalW + 0, totalH + 0);
+
+  // Note bar
+  ctx.fillStyle = '#e8eeff';
+  ctx.fillRect(0, 0, totalW, 28);
+  ctx.fillStyle = '#566079';
+  ctx.font = 'bold 10px "Microsoft YaHei"';
+  ctx.fillText('日历时间以东八区标准时间为准', 10, 18);
+
+  // Months
+  const start = parseDay(data.timeline_start);
+  let groups = [];
+  for (let i = 0; i < data.visible_days; i++) {
+    const cur = addDays(start, i);
+    const key = cur.getFullYear() + '-' + cur.getMonth();
+    const last = groups[groups.length-1];
+    if (last && last.key === key) last.cnt++;
+    else groups.push({ key, m: cur.getMonth()+1, cnt: 1, startIdx: i });
+  }
+  let mx = PAD_L;
+  groups.forEach(g => {
+    const gw = g.cnt * DAY_W;
+    ctx.fillStyle = '#b9c2ff';
+    ctx.fillRect(mx, 28, gw, 32);
+    ctx.strokeStyle = '#d5dcff';
+    ctx.strokeRect(mx, 28, gw, 32);
+    ctx.fillStyle = '#151b32';
+    ctx.font = 'bold 16px "Microsoft YaHei"';
+    ctx.textAlign = 'center';
+    ctx.fillText(g.m + '月', mx + gw/2, 50);
+    ctx.textAlign = 'left';
+    mx += gw;
+  });
+
+  // Days
+  const weekNames = '一二三四五六日';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 60, totalW, 36);
+  ctx.strokeStyle = '#d6def2';
+  ctx.strokeRect(0, 60, totalW, 36);
+  for (let i = 0; i < data.visible_days; i++) {
+    const d = addDays(start, i);
+    const x = PAD_L + i * DAY_W;
+    if (d.getDay() === 0 || d.getDay() === 6) {
+      ctx.fillStyle = '#eef3ff';
+      ctx.fillRect(x, 60, DAY_W, 36);
+    }
+    ctx.fillStyle = '#687087';
+    ctx.font = 'bold 10px "Microsoft YaHei"';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${pad(d.getMonth()+1)}/${pad(d.getDate())}\n周${weekNames[d.getDay()]}`, x + DAY_W/2, 78);
+    ctx.strokeStyle = '#dfe5f6';
+    ctx.strokeRect(x, 60, DAY_W, 36);
+    // Vertical grid line
+    ctx.strokeStyle = '#dce5f7';
+    ctx.beginPath();
+    ctx.moveTo(x, 96);
+    ctx.lineTo(x, totalH);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = '#dce5f7';
+  ctx.beginPath();
+  ctx.moveTo(PAD_L + vd * DAY_W, 96);
+  ctx.lineTo(PAD_L + vd * DAY_W, totalH);
+  ctx.stroke();
+
+  // Horizontal grid lines
+  for (let r = 0; r <= Math.ceil((totalH - 96) / ROW_H) + 1; r++) {
+    const y = 96 + r * ROW_H;
+    ctx.strokeStyle = '#e4e9f8';
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(totalW, y);
+    ctx.stroke();
+  }
+
+  // Friday-to-Friday week blocks (canvas export)
+  const canvasStart = parseDay(data.timeline_start);
+  const canvasFirstFri = (5 - canvasStart.getDay() + 7) % 7;
+  for (let wkStart = canvasFirstFri; wkStart < vd; wkStart += 7) {
+    const wkEnd = Math.min(wkStart + 7, vd);
+    const bx = PAD_L + wkStart * DAY_W;
+    const bw = (wkEnd - wkStart) * DAY_W;
+    const weekNum = Math.floor((wkStart - canvasFirstFri) / 7);
+    ctx.fillStyle = weekNum % 2 === 0 ? 'rgba(93,108,255,0.08)' : 'rgba(57,167,216,0.08)';
+    ctx.fillRect(bx, 96, bw, totalH - 96);
+  }
+
+  // Today line
+  const today = new Date();
+  const todayOff = Math.round((today - start) / 86400000);
+  if (todayOff >= 0 && todayOff <= vd) {
+    const tx = PAD_L + todayOff * DAY_W;
+    ctx.strokeStyle = '#5d6cff';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(tx, 28);
+    ctx.lineTo(tx, totalH);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#5d6cff';
+    roundRect(ctx, tx - 50, 30, 100, 22, 4);
+    ctx.fill();
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 9px "Microsoft YaHei"';
+    ctx.textAlign = 'center';
+    ctx.fillText(`今日 ${today.getMonth()+1}/${today.getDate()}`, tx, 44);
+    ctx.textAlign = 'left';
+  }
+
+  // Events
+  const sorted = [...data.events].sort((a,b) => (a.row||0) - (b.row||0) || a.start.localeCompare(b.start));
+  sorted.forEach(ev => {
+    const geom = eventGeometry(ev);
+    if (!geom) return;
+    const { x, y, w } = geom;
+    const color = ev.color || '#ffad47';
+    const shadow = 4;
+
+    // Shadow
+    ctx.fillStyle = '#c9d2e8';
+    roundRect(ctx, x + shadow, y + shadow, w, EV_H, 4);
+    ctx.fill();
+
+    // Main card
+    ctx.fillStyle = '#ffffff';
+    roundRect(ctx, x, y, w, EV_H, 4);
+    ctx.fill();
+
+    // Color header
+    const nameW = Math.min(154, w);
+    ctx.fillStyle = color;
+    roundRect(ctx, x, y, nameW, 26, 4);
+    ctx.fill();
+    ctx.fillRect(x, y + 13, nameW, 13);
+
+    // Name
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 11px "Microsoft YaHei"';
+    ctx.textAlign = 'left';
+    ctx.fillText(ellipsis(ev.name, 12), x + 8, y + 18);
+
+    // Range
+    ctx.fillStyle = '#675b42';
+    ctx.font = 'bold 10px "Microsoft YaHei"';
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 3;
+    ctx.strokeText(formatRange(ev), x + 6, y - 5);
+    ctx.fillText(formatRange(ev), x + 6, y - 5);
+
+    // Tag
+    ctx.fillStyle = '#fff8e8';
+    roundRect(ctx, x + 7, y + 34, 80, 20, 9);
+    ctx.fill();
+    ctx.strokeStyle = '#d6c9a8';
+    roundRect(ctx, x + 7, y + 34, 80, 20, 9);
+    ctx.stroke();
+    ctx.fillStyle = '#7b653d';
+    ctx.font = 'bold 10px "Microsoft YaHei"';
+    ctx.textAlign = 'center';
+    ctx.fillText(ev.tag || ev.duration + '天', x + 47, y + 48);
+
+    // End strip
+    ctx.fillStyle = color;
+    roundRect(ctx, x + w - 36, y, 36, EV_H, 4);
+    ctx.fill();
+    ctx.fillRect(x + w - 36, y, 10, EV_H);
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 18px "Microsoft YaHei"';
+    ctx.textAlign = 'center';
+    ctx.fillText('›', x + w - 18, y + 42);
+
+    // Images (draw if loaded)
+    let imgX = 108;
+    (ev.images || []).slice(0, 12).forEach(img => {
+      const sz = Number(img.size) || 42;
+      const ox = Number(img.x) || 0;
+      const oy = Number(img.y) || 0;
+      const ix = x + imgX + ox;
+      const iy = y + EV_H/2 - sz/2 + oy;
+      try {
+        const imgEl = new Image();
+        imgEl.src = img.data;
+        if (imgEl.complete && imgEl.naturalWidth > 0) {
+          ctx.drawImage(imgEl, ix, iy, sz, sz);
+        }
+      } catch(e) {}
+      imgX += Number(img.size) + 7;
+    });
+  });
+
+  // Download
+  const link = document.createElement('a');
+  link.download = '活动日历.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+  setStatus('已导出图片');
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function ellipsis(str, max) {
+  if (str.length <= max) return str;
+  return str.slice(0, max) + '…';
+}
+
+// ======================== Time Settings ========================
+el.applyTime.addEventListener('click', () => {
+  const val = el.startDate.value;
+  if (!val || !/^\d{4}-\d{2}-\d{2}$/.test(val)) { alert('日期格式请使用 YYYY-MM-DD'); return; }
+  data.timeline_start = val;
+  data.visible_days = Math.max(7, Number(el.visibleDays.value) || 45);
+  saveData(true);
+  renderAll();
+  setStatus('时间设置已应用');
+});
+
+// ======================== Template Collapse ========================
+el.toggleTpl.addEventListener('click', () => {
+  templatesCollapsed = !templatesCollapsed;
+  el.toggleTpl.textContent = templatesCollapsed ? '+' : '−';
+  renderTemplates();
+});
+
+// ======================== Template Editor Modal ========================
+let _editingTplIdx = -1;
+
+function openTplEditor(idx) {
+  _editingTplIdx = idx;
+  const tpl = data.templates[idx];
+  if (!tpl) return;
+  el.teName.value = tpl.name;
+  el.teDuration.value = tpl.duration;
+  el.teTag.value = tpl.tag || '';
+  el.teColor.value = tpl.color;
+  el.teModal.classList.add('show');
+}
+
+el.teCancel.addEventListener('click', () => el.teModal.classList.remove('show'));
+el.teModal.addEventListener('click', e => { if (e.target === el.teModal) el.teModal.classList.remove('show'); });
+el.teSave.addEventListener('click', () => {
+  const tpl = data.templates[_editingTplIdx];
+  if (!tpl) return;
+  tpl.name = el.teName.value.trim() || '未命名';
+  tpl.duration = Math.max(1, Number(el.teDuration.value) || 7);
+  tpl.tag = el.teTag.value.trim();
+  tpl.color = el.teColor.value;
+  el.teModal.classList.remove('show');
+  saveData(true);
+  renderTemplates();
+  renderCalendar();
+});
+
+// ======================== Mouse wheel horizontal scroll ========================
+el.calWrap.addEventListener('wheel', function(e) {
+  if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+    e.preventDefault();
+    this.scrollLeft += e.deltaY * 3;
+  }
+}, { passive: false });
+
+// ======================== Scroll to today ========================
+function scrollToToday() {
+  const wrap = el.calWrap;
+  if (!wrap) return;
+  const today = new Date();
+  const start = parseDay(data.timeline_start);
+  const offset = Math.round((today - start) / 86400000);
+  if (offset >= 0 && offset < data.visible_days) {
+    const scrollX = offset * DAY_W - wrap.clientWidth / 2 + 200;
+    wrap.scrollLeft = Math.max(0, scrollX);
+  }
+}
+
+// ======================== Render All ========================
+function renderAll() {
+  el.startDate.value = data.timeline_start;
+  el.visibleDays.value = data.visible_days;
+  renderTemplates();
+  renderCalendar();
+  renderEditor();
+}
+
+// ======================== Embedded Data ========================
+// 将活动日历数据写在此即可内嵌（导出HTML时会自动替换）
+const EMBEDDED_JSON = null;
+
+// ======================== Init ========================
+(async function init() {
+  if (EMBEDDED_JSON && EMBEDDED_JSON.events) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(EMBEDDED_JSON));
+  } else {
+    // Fallback: try external file
+    try {
+      const resp = await fetch('活动日历数据.json');
+      if (resp.ok) {
+        const jsonData = await resp.json();
+        if (jsonData && jsonData.events) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(jsonData));
+        }
+      }
+    } catch(e) {}
+  }
+  data = initData();
+  if (data._applyPack) { delete data._applyPack; packRows(); saveData(true); }
+  renderAll();
+  scrollToToday();
+})();
+
+// Click on empty calendar to deselect
+el.gridArea.addEventListener('click', e => {
+  if (e.target === el.gridArea) {
+    selectedEventId = null;
+    renderAll();
+  }
+});
+
+// Prevent context menu on empty area
+el.gridArea.addEventListener('contextmenu', e => e.preventDefault());
+
+// Keyboard shortcut
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    el.ctxMenu.classList.remove('show');
+  }
+});
+
+console.log('活动日历编辑器已加载。数据保存在 localStorage。');
+</script>
+</body>
+</html>
